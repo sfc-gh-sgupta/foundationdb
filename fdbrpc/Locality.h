@@ -43,6 +43,7 @@ struct ProcessClass {
 		DataDistributorClass,
 		CoordinatorClass,
 		RatekeeperClass,
+		BlobManagerClass,
 		StorageCacheClass,
 		BackupClass,
 		GrvProxyClass,
@@ -69,6 +70,7 @@ struct ProcessClass {
 		ClusterController,
 		DataDistributor,
 		Ratekeeper,
+		BlobManager,
 		StorageCache,
 		Backup,
 		NoRole
@@ -103,6 +105,7 @@ public:
 		else if (s=="data_distributor") _class = DataDistributorClass;
 		else if (s=="coordinator") _class = CoordinatorClass;
 		else if (s=="ratekeeper") _class = RatekeeperClass;
+		else if (s=="blob_manager") _class = BlobManagerClass;
 		else if (s=="storage_cache") _class = StorageCacheClass;
 		else if (s=="backup") _class = BackupClass;
 		else _class = InvalidClass;
@@ -130,6 +133,7 @@ public:
 		else if (classStr=="data_distributor") _class = DataDistributorClass;
 		else if (classStr=="coordinator") _class = CoordinatorClass;
 		else if (classStr=="ratekeeper") _class = RatekeeperClass;
+		else if (classStr=="blob_manager") _class = BlobManagerClass;
 		else if (classStr=="storage_cache") _class = StorageCacheClass;
 		else if (classStr=="backup") _class = BackupClass;
 		else _class = InvalidClass;
@@ -167,6 +171,7 @@ public:
 			case DataDistributorClass: return "data_distributor";
 			case CoordinatorClass: return "coordinator";
 			case RatekeeperClass: return "ratekeeper";
+			case BlobManagerClass: return "blob_manager";
 			case StorageCacheClass: return "storage_cache";
 			case BackupClass: return "backup";
 			default: return "invalid";

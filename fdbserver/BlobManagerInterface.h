@@ -22,17 +22,50 @@
 #define FDBSERVER_BLOBMANAGERINTERFACE_H
 #pragma once
 
-#include "fdbserver/ServerDBInfo.h"
+#include "fdbclient/FDBTypes.h"
+#include "fdbclient/KeyRangeMap.h"
+#include "fdbrpc/Locality.h"
+#include "fdbrpc/fdbrpc.h"
 
-// TODO everything below here should go away once blob manager isn't embedded in another role
+struct BlobManagerInterface {
+	constexpr static FileIdentifier file_identifier = 369169;
+	RequestStream<ReplyPromise<Void>> waitFailure;
+	RequestStream<struct HaltBlobManagerRequest> haltBlobManager;
+	struct LocalityData locality;
 
-// TODO add actual interface, remove functionality stuff hack for ratekeeper
+	BlobManagerInterface() {}
+	explicit BlobManagerInterface(const struct LocalityData& l) : locality(l) {}
+
+	void initEndpoints() {}
+	UID id() const { return waitFailure.getEndpoint().token; }
+	NetworkAddress address() const { return waitFailure.getEndpoint().getPrimaryAddress(); }
+	bool operator==(const BlobManagerInterface& r) const { return id() == r.id(); }
+	bool operator!=(const BlobManagerInterface& r) const { return !(*this == r); }
+
+	template <class Archive>
+	void serialize(Archive& ar) {
+		serializer(ar, waitFailure, haltBlobManager, locality);
+	}
+};
+
+struct HaltBlobManagerRequest {
+	constexpr static FileIdentifier file_identifier = 4149140;
+	UID requesterID;
+	ReplyPromise<Void> reply;
+
+	HaltBlobManagerRequest() {}
+	explicit HaltBlobManagerRequest(UID uid) : requesterID(uid) {}
+
+	template <class Ar>
+	void serialize(Ar& ar) {
+		serializer(ar, requesterID, reply);
+	}
+};
+
 void updateClientBlobRanges(KeyRangeMap<bool>* knownBlobRanges,
                             RangeResult dbBlobRanges,
                             Arena a,
                             VectorRef<KeyRangeRef>* rangesToAdd,
                             VectorRef<KeyRangeRef>* rangesToRemove);
-
-Future<Void> blobManager(const LocalityData& locality, const Reference<AsyncVar<ServerDBInfo> const>& dbInfo);
 
 #endif

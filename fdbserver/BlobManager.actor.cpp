@@ -176,12 +176,13 @@ struct RangeAssignment {
 struct BlobWorkerStats {
 	int numGranulesAssigned;
 
-	BlobWorkerStats(int numGranulesAssigned=0): numGranulesAssigned(numGranulesAssigned) {}
+	BlobWorkerStats(int numGranulesAssigned = 0) : numGranulesAssigned(numGranulesAssigned) {}
 };
 
 struct BlobManagerData {
 	UID id;
 	Database db;
+	PromiseStream<Future<Void>> addActor;
 
 	std::unordered_map<UID, BlobWorkerInterface> workersById;
 	std::unordered_map<UID, BlobWorkerStats> workerStats; // mapping between workerID -> workerStats
@@ -264,8 +265,8 @@ ACTOR Future<Standalone<VectorRef<KeyRef>>> splitNewRange(Reference<ReadYourWrit
 static UID pickWorkerForAssign(BlobManagerData* bmData) {
 	int minGranulesAssigned = INT_MAX;
 	std::vector<UID> eligibleWorkers;
-	
-	for (auto const &worker : bmData->workerStats) {
+
+	for (auto const& worker : bmData->workerStats) {
 		UID currId = worker.first;
 		int granulesAssigned = worker.second.numGranulesAssigned;
 
@@ -282,8 +283,9 @@ static UID pickWorkerForAssign(BlobManagerData* bmData) {
 	ASSERT(eligibleWorkers.size() > 0);
 	int idx = deterministicRandom()->randomInt(0, eligibleWorkers.size());
 	if (BM_DEBUG) {
-		printf("picked worker %s, which has a minimal number (%d) of granules assigned\n", 
-			   eligibleWorkers[idx].toString().c_str(), minGranulesAssigned);
+		printf("picked worker %s, which has a minimal number (%d) of granules assigned\n",
+		       eligibleWorkers[idx].toString().c_str(),
+		       minGranulesAssigned);
 	}
 
 	return eligibleWorkers[idx];
@@ -523,11 +525,9 @@ ACTOR Future<Void> rangeMover(BlobManagerData* bmData) {
 	}
 }
 
-// TODO MOVE ELSEWHERE
-// TODO replace locality with full BlobManagerInterface eventually
-ACTOR Future<Void> blobManager(LocalityData locality, Reference<AsyncVar<ServerDBInfo> const> dbInfo) {
-	state BlobManagerData self(deterministicRandom()->randomUniqueID(),
-	                           openDBOnServer(dbInfo, TaskPriority::DefaultEndpoint, LockAware::True));
+// TODO MOVE ELSEWHERE <-- really?
+ACTOR Future<Void> blobManager(BlobManagerInterface bmInterf, Reference<AsyncVar<ServerDBInfo> const> dbInfo) {
+	state BlobManagerData self(bmInterf.id(), openDBOnServer(dbInfo, TaskPriority::DefaultEndpoint, LockAware::True));
 
 	state PromiseStream<Future<Void>> addActor;
 	state Future<Void> collection = actorCollection(addActor.getFuture());
@@ -551,7 +551,7 @@ ACTOR Future<Void> blobManager(LocalityData locality, Reference<AsyncVar<ServerD
 
 	int numWorkers = 2;
 	for (int i = 0; i < numWorkers; i++) {
-		state BlobWorkerInterface bwInterf(locality, deterministicRandom()->randomUniqueID());
+		state BlobWorkerInterface bwInterf(bmInterf.locality, deterministicRandom()->randomUniqueID());
 		bwInterf.initEndpoints();
 		self.workersById.insert({ bwInterf.id(), bwInterf });
 		self.workerStats.insert({ bwInterf.id(), BlobWorkerStats() });
