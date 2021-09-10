@@ -62,6 +62,7 @@ struct HaltBlobManagerRequest {
 	}
 };
 
+// CAN REMOVE
 void updateClientBlobRanges(KeyRangeMap<bool>* knownBlobRanges,
                             RangeResult dbBlobRanges,
                             Arena a,

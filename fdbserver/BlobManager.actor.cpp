@@ -388,6 +388,10 @@ ACTOR Future<Void> rangeAssigner(BlobManagerData* bmData) {
 }
 
 // TODO eventually CC should probably do this and pass it as part of recruitment?
+//
+// each maanger has its own epoch. new manager -> epoch++
+// once manager starts with epoch e, all worker actions that  are made given a seqno. higher seqno always wins
+// CC should manage epoch and give it to BM upon startup
 ACTOR Future<int64_t> acquireManagerLock(BlobManagerData* bmData) {
 	state Reference<ReadYourWritesTransaction> tr = makeReference<ReadYourWritesTransaction>(bmData->db);
 	tr->setOption(FDBTransactionOptions::ACCESS_SYSTEM_KEYS);

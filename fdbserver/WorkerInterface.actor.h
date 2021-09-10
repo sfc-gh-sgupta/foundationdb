@@ -613,6 +613,7 @@ struct InitializeRatekeeperRequest {
 struct InitializeBlobManagerRequest {
 	constexpr static FileIdentifier file_identifier = 2567474;
 	UID reqId;
+	// add epoch
 	ReplyPromise<BlobManagerInterface> reply;
 
 	InitializeBlobManagerRequest() {}

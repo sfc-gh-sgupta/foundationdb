@@ -531,6 +531,7 @@ ACTOR Future<Void> registrationClient(Reference<AsyncVar<Optional<ClusterControl
 		                              requestGeneration++,
 		                              ddInterf->get(),
 		                              rkInterf->get(),
+		                              bmInterf->get(),
 		                              degraded->get());
 		for (auto const& i : issues->get()) {
 			request.issues.push_back_deep(request.issues.arena(), i);
@@ -586,6 +587,7 @@ ACTOR Future<Void> registrationClient(Reference<AsyncVar<Optional<ClusterControl
 			when(wait(ccInterface->onChange())) { break; }
 			when(wait(ddInterf->onChange())) { break; }
 			when(wait(rkInterf->onChange())) { break; }
+			when(wait(bmInterf->onChange())) { break; }
 			when(wait(degraded->onChange())) { break; }
 			when(wait(FlowTransport::transport().onIncompatibleChanged())) { break; }
 			when(wait(issues->onChange())) { break; }
@@ -1649,6 +1651,7 @@ ACTOR Future<Void> workerServer(Reference<ClusterConnectionFile> connFile,
 					TEST(true); // Recruited while already a blob manager.
 				} else {
 					startRole(Role::BLOB_MANAGER, recruited.id(), interf.id());
+					printf("starting blob manager");
 					DUMPTOKEN(recruited.waitFailure);
 
 					Future<Void> blobManagerProcess = blobManager(recruited, dbInfo);
