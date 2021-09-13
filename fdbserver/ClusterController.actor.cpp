@@ -2767,8 +2767,8 @@ public:
 	bool onMasterIsBetter(const WorkerDetails& worker, ProcessClass::ClusterRole role) const {
 		ASSERT(masterProcessId.present());
 		const auto& pid = worker.interf.locality.processId();
-		if ((role != ProcessClass::DataDistributor &&
-		     role != ProcessClass::Ratekeeper & &role != ProcessClass::BlobManager) ||
+		if ((role != ProcessClass::DataDistributor && role != ProcessClass::Ratekeeper &&
+		     role != ProcessClass::BlobManager) ||
 		    pid == masterProcessId.get()) {
 			return false;
 		}
@@ -3166,8 +3166,9 @@ struct DataDistributorSingleton : Singleton<DataDistributorInterface> {
 	ProcessClass::ClusterRole getClusterRole() const { return ProcessClass::DataDistributor; }
 
 	void setOnDb(ClusterControllerData* cc) const {
-		if (interface.present())
-			const { cc->db.setDistributor(interface.get()); }
+		if (interface.present()) {
+			cc->db.setDistributor(interface.get());
+		}
 	}
 	void halt(ClusterControllerData* cc, Optional<Standalone<StringRef>> pid) const {
 		if (interface.present()) {
@@ -3572,9 +3573,11 @@ void checkBetterSingletons(ClusterControllerData* self) {
 		}
 	}
 
+	/*
 	for (auto singleton : singletons) {
-		if ()
+	    if ()
 	}
+	*/
 }
 
 ACTOR Future<Void> doCheckOutstandingRequests(ClusterControllerData* self) {
@@ -4764,8 +4767,7 @@ ACTOR Future<Void> startDataDistributor(ClusterControllerData* self) {
 					TraceEvent("CCHaltDataDistributorAfterRecruit", self->id)
 					    .detail("DDID", distributor.get().id())
 					    .detail("DcID", printable(self->clusterControllerDcId));
-					haltSingleton(
-					    self, ProcessClass::DataDistributor, distributor.get().locality.processId(), distributor);
+					DataDistributorSingleton(distributor).halt(self, distributor.get().locality.processId());
 				}
 				if (!distributor.present() || distributor.get().id() != ddInterf.get().id()) {
 					self->db.setDistributor(ddInterf.get());
@@ -4853,7 +4855,7 @@ ACTOR Future<Void> startRatekeeper(ClusterControllerData* self) {
 					TraceEvent("CCHaltRatekeeperAfterRecruit", self->id)
 					    .detail("RKID", ratekeeper.get().id())
 					    .detail("DcID", printable(self->clusterControllerDcId));
-					haltSingleton(self, ProcessClass::Ratekeeper, ratekeeper.get().locality.processId(), ratekeeper);
+					RatekeeperSingleton(ratekeeper).halt(self, ratekeeper.get().locality.processId());
 				}
 				if (!ratekeeper.present() || ratekeeper.get().id() != interf.get().id()) {
 					self->db.setRatekeeper(interf.get());
@@ -4942,7 +4944,7 @@ ACTOR Future<Void> startBlobManager(ClusterControllerData* self) {
 					TraceEvent("CCHaltBlobManagerAfterRecruit", self->id)
 					    .detail("BMID", blobManager.get().id())
 					    .detail("DcID", printable(self->clusterControllerDcId));
-					haltSingleton(self, ProcessClass::BlobManager, blobManager.get().locality.processId(), blobManager);
+					BlobManagerSingleton(blobManager).halt(self, blobManager.get().locality.processId());
 				}
 				if (!blobManager.present() || blobManager.get().id() != interf.get().id()) {
 					self->db.setBlobManager(interf.get());
@@ -4969,7 +4971,7 @@ ACTOR Future<Void> monitorBlobManager(ClusterControllerData* self) {
 		if (self->db.serverInfo->get().blobManager.present() && !self->recruitBlobManager.get()) {
 			choose {
 				when(wait(waitFailureClient(self->db.serverInfo->get().blobManager.get().waitFailure,
-				                            SERVER_KNOBS->BM_FAILURE_TIME))) {
+				                            SERVER_KNOBS->BLOB_MANAGER_FAILURE_TIME))) {
 					TraceEvent("CCBlobManagerDied", self->id)
 					    .detail("BMID", self->db.serverInfo->get().blobManager.get().id());
 					self->db.clearInterf(ProcessClass::BlobManagerClass);
