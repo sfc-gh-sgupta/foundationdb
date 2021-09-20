@@ -2273,6 +2273,9 @@ struct ConsistencyCheckWorkload : TestWorkload {
 			return false;
 		}
 
+		// TODO: check blob workers (that no other process is on a BW process of class BW and that there is a BW on the
+		// BW class)
+
 		// TODO: Check Tlog
 
 		return true;

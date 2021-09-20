@@ -300,6 +300,16 @@ public:
 		throw no_more_servers();
 	}
 
+	// Returns a worker that can be used by a blob worker
+	// Note: we restrict the set of possible workers to those in the same DC as the BM
+	WorkerDetails getBlobWorker(RecruitBlobWorkerRequest const& req) {
+		auto blobManagerDcId = db.serverInfo->get().blobManager.get().locality.dcId();
+		std::map<Optional<Standalone<StringRef>>, int> used;
+		return getWorkerForRoleInDatacenter(
+		           blobManagerDcId, ProcessClass::BlobWorker, ProcessClass::OkayFit, db.config, used, {}, true)
+		    .worker;
+	}
+
 	std::vector<WorkerDetails> getWorkersForSeedServers(
 	    DatabaseConfiguration const& conf,
 	    Reference<IReplicationPolicy> const& policy,
@@ -3035,6 +3045,7 @@ public:
 	std::vector<RecruitFromConfigurationRequest> outstandingRecruitmentRequests;
 	std::vector<RecruitRemoteFromConfigurationRequest> outstandingRemoteRecruitmentRequests;
 	std::vector<std::pair<RecruitStorageRequest, double>> outstandingStorageRequests;
+	std::vector<std::pair<RecruitBlobWorkerRequest, double>> outstandingBlobWorkerRequests;
 	ActorCollection ac;
 	UpdateWorkerList updateWorkerList;
 	Future<Void> outstandingRequestChecker;
@@ -3746,6 +3757,30 @@ void clusterRecruitStorage(ClusterControllerData* self, RecruitStorageRequest re
 			    .error(e);
 		} else {
 			TraceEvent(SevError, "RecruitStorageError", self->id).error(e);
+			throw; // Any other error will bring down the cluster controller
+		}
+	}
+}
+
+void clusterRecruitBlobWorker(ClusterControllerData* self, RecruitBlobWorkerRequest req) {
+	fprintf(stderr, "CC got req to recruit BW.\n");
+	try {
+		if (!self->gotProcessClasses)
+			throw no_more_servers();
+		auto worker = self->getBlobWorker(req);
+		RecruitBlobWorkerReply rep;
+		rep.worker = worker.interf;
+		rep.processClass = worker.processClass;
+		fprintf(stderr, "CC found worker for BW.\n");
+		req.reply.send(rep);
+	} catch (Error& e) {
+		fprintf(stderr, "CC couldn't find worker for BW.\n");
+		if (e.code() == error_code_no_more_servers) {
+			self->outstandingBlobWorkerRequests.push_back(
+			    std::make_pair(req, now() + SERVER_KNOBS->RECRUITMENT_TIMEOUT));
+			TraceEvent(SevWarn, "RecruitBlobWorkerNotAvailable", self->id).error(e);
+		} else {
+			TraceEvent(SevError, "RecruitBlobWorkerError", self->id).error(e);
 			throw; // Any other error will bring down the cluster controller
 		}
 	}
@@ -5198,7 +5233,12 @@ ACTOR Future<Void> clusterControllerCore(ClusterControllerFullInterface interf,
 			self.addActor.send(clusterRecruitRemoteFromConfiguration(&self, req));
 		}
 		when(RecruitStorageRequest req = waitNext(interf.recruitStorage.getFuture())) {
+			fprintf(stderr, "in CC for StorageReq\n");
 			clusterRecruitStorage(&self, req);
+		}
+		when(RecruitBlobWorkerRequest req = waitNext(interf.recruitBlobWorker.getFuture())) {
+			fprintf(stderr, "in CC\n");
+			clusterRecruitBlobWorker(&self, req);
 		}
 		when(RegisterWorkerRequest req = waitNext(interf.registerWorker.getFuture())) {
 			++self.registerWorkerRequests;

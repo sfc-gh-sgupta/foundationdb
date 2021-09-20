@@ -1958,7 +1958,9 @@ ACTOR Future<Void> runCommitVersionChecks(BlobWorkerData* bwData) {
 	}
 }
 
-ACTOR Future<Void> blobWorker(BlobWorkerInterface bwInterf, Reference<AsyncVar<ServerDBInfo> const> dbInfo) {
+ACTOR Future<Void> blobWorker(BlobWorkerInterface bwInterf,
+                              ReplyPromise<InitializeBlobWorkerReply> recruitReply,
+                              Reference<AsyncVar<ServerDBInfo> const> dbInfo) {
 	state BlobWorkerData self(bwInterf.id(), openDBOnServer(dbInfo, TaskPriority::DefaultEndpoint, LockAware::True));
 	self.id = bwInterf.id();
 	self.locality = bwInterf.locality;
@@ -1992,6 +1994,10 @@ ACTOR Future<Void> blobWorker(BlobWorkerInterface bwInterf, Reference<AsyncVar<S
 
 	state PromiseStream<Future<Void>> addActor;
 	state Future<Void> collection = actorCollection(addActor.getFuture());
+
+	InitializeBlobWorkerReply rep;
+	rep.interf = bwInterf;
+	recruitReply.send(rep);
 
 	addActor.send(waitFailureServer(bwInterf.waitFailure.getFuture()));
 	addActor.send(runCommitVersionChecks(&self));

@@ -5089,6 +5089,7 @@ ACTOR Future<Void> initializeStorage(DDTeamCollection* self,
                                      const DDEnabledState* ddEnabledState,
                                      bool recruitTss,
                                      Reference<TSSPairState> tssState) {
+	fprintf(stderr, "initializeStorage was called\n");
 	// SOMEDAY: Cluster controller waits for availability, retry quickly if a server's Locality changes
 	self->recruitingStream.set(self->recruitingStream.get() + 1);
 
@@ -5360,6 +5361,8 @@ ACTOR Future<Void> storageRecruiter(DDTeamCollection* self,
 				    brokenPromiseToNever(recruitStorage->get().getReply(rsr, TaskPriority::DataDistribution));
 			}
 
+			fprintf(stderr, "storageRecruiter looped back\n");
+
 			choose {
 				when(RecruitStorageReply candidateWorker = wait(fCandidateWorker)) {
 					AddressExclusion candidateSSAddr(candidateWorker.worker.stableAddress().ip,
@@ -5383,6 +5386,7 @@ ACTOR Future<Void> storageRecruiter(DDTeamCollection* self,
 						tssState = makeReference<TSSPairState>(candidateWorker.worker.locality);
 
 						addTSSInProgress.send(tssState->waitComplete());
+						fprintf(stderr, "about to initialize storage server\n");
 						self->addActor.send(initializeStorage(self, candidateWorker, ddEnabledState, true, tssState));
 						checkTss = self->initialFailureReactionDelay;
 					} else {
@@ -5393,6 +5397,7 @@ ACTOR Future<Void> storageRecruiter(DDTeamCollection* self,
 							    .detail("Stage", "PairSS")
 							    .detail("Addr", candidateSSAddr.toString())
 							    .detail("Locality", candidateWorker.worker.locality.toString());
+							fprintf(stderr, "about to initialize storage server\n");
 							self->addActor.send(
 							    initializeStorage(self, candidateWorker, ddEnabledState, false, tssState));
 							// successfully started recruitment of pair, reset tss recruitment state
@@ -5400,12 +5405,16 @@ ACTOR Future<Void> storageRecruiter(DDTeamCollection* self,
 						} else {
 							TEST(tssState->active); // TSS recruitment skipped potential pair because it's in a
 							                        // different dc/datahall
+							fprintf(stderr, "about to initialize storage server\n");
 							self->addActor.send(initializeStorage(
 							    self, candidateWorker, ddEnabledState, false, makeReference<TSSPairState>()));
 						}
 					}
 				}
-				when(wait(recruitStorage->onChange())) { fCandidateWorker = Future<RecruitStorageReply>(); }
+				when(wait(recruitStorage->onChange())) {
+					fprintf(stderr, "recruitStorage got change\n");
+					fCandidateWorker = Future<RecruitStorageReply>();
+				}
 				when(wait(self->zeroHealthyTeams->onChange())) {
 					if (!pendingTSSCheck && self->zeroHealthyTeams->get() &&
 					    (self->isTssRecruiting || self->tss_info_by_pair.size() > 0)) {
@@ -5463,7 +5472,7 @@ ACTOR Future<Void> storageRecruiter(DDTeamCollection* self,
 						checkTss = Never();
 					}
 				}
-				when(wait(self->restartRecruiting.onTrigger())) {}
+				when(wait(self->restartRecruiting.onTrigger())) { fprintf(stderr, "restartRrecruiting got change\n"); }
 			}
 			wait(delay(FLOW_KNOBS->PREVENT_FAST_SPIN_DELAY, TaskPriority::DataDistribution));
 		} catch (Error& e) {
