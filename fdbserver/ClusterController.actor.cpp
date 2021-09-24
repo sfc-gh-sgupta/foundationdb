@@ -303,11 +303,33 @@ public:
 	// Returns a worker that can be used by a blob worker
 	// Note: we restrict the set of possible workers to those in the same DC as the BM
 	WorkerDetails getBlobWorker(RecruitBlobWorkerRequest const& req) {
+		fprintf(stderr, "in getBlobWorker\n");
 		auto blobManagerDcId = db.serverInfo->get().blobManager.get().locality.dcId();
-		std::map<Optional<Standalone<StringRef>>, int> used;
-		return getWorkerForRoleInDatacenter(
-		           blobManagerDcId, ProcessClass::BlobWorker, ProcessClass::OkayFit, db.config, used, {}, true)
-		    .worker;
+		std::set<AddressExclusion> excludedAddresses(req.excludeAddresses.begin(), req.excludeAddresses.end());
+
+		for (auto addr : excludedAddresses) {
+			fprintf(stderr, "excluding addr in getBlobWorker: %s\n", addr.toString().c_str());
+		}
+
+		for (auto& it : id_worker) {
+			fprintf(stderr,
+			        "workerAvailable: %d, blobManagerDcId: %d, primeAddr: %d, fitness: %d\n",
+			        workerAvailable(it.second, false),
+			        blobManagerDcId == it.second.details.interf.locality.dcId(),
+			        !addressExcluded(excludedAddresses, it.second.details.interf.address()),
+			        it.second.details.processClass.machineClassFitness(ProcessClass::BlobWorker) <=
+			            ProcessClass::UnsetFit);
+			if (workerAvailable(it.second, false) && blobManagerDcId == it.second.details.interf.locality.dcId() &&
+			    !addressExcluded(excludedAddresses, it.second.details.interf.address()) &&
+			    (!it.second.details.interf.secondaryAddress().present() ||
+			     !addressExcluded(excludedAddresses, it.second.details.interf.secondaryAddress().get())) &&
+			    it.second.details.processClass.machineClassFitness(ProcessClass::BlobWorker) <=
+			        ProcessClass::UnsetFit) {
+				return it.second.details;
+			}
+		}
+
+		throw no_more_servers();
 	}
 
 	std::vector<WorkerDetails> getWorkersForSeedServers(
@@ -3421,6 +3443,41 @@ void checkOutstandingStorageRequests(ClusterControllerData* self) {
 	}
 }
 
+void checkOutstandingBlobWorkerRequests(ClusterControllerData* self) {
+	fprintf(stderr, "in checkOutstandingBlobWorkerRequests\n");
+	for (int i = 0; i < self->outstandingBlobWorkerRequests.size(); i++) {
+		auto& req = self->outstandingBlobWorkerRequests[i];
+		try {
+			if (req.second < now()) {
+				req.first.reply.sendError(timed_out());
+				swapAndPop(&self->outstandingBlobWorkerRequests, i--);
+			} else {
+				if (!self->gotProcessClasses)
+					throw no_more_servers();
+
+				auto worker = self->getBlobWorker(req.first);
+				RecruitBlobWorkerReply rep;
+				rep.worker = worker.interf;
+				rep.processClass = worker.processClass;
+				fprintf(stderr, "about to send worker in checkOutstandingBlobWorkerRequests\n");
+				req.first.reply.send(rep);
+				swapAndPop(&self->outstandingBlobWorkerRequests, i--);
+			}
+		} catch (Error& e) {
+			fprintf(stderr, "error in checkOutstandingBlobWorkerRequests: %s\n", e.name());
+			if (e.code() == error_code_no_more_servers) {
+				TraceEvent(SevWarn, "RecruitBlobWorkerNotAvailable", self->id)
+				    .suppressFor(1.0)
+				    .detail("OutstandingReq", i)
+				    .error(e);
+			} else {
+				TraceEvent(SevError, "RecruitBlobWorkerError", self->id).error(e);
+				throw;
+			}
+		}
+	}
+}
+
 // Finds and returns a new process for role
 WorkerDetails findNewProcessForSingleton(ClusterControllerData* self,
                                          const ProcessClass::ClusterRole role,
@@ -3600,6 +3657,7 @@ ACTOR Future<Void> doCheckOutstandingRequests(ClusterControllerData* self) {
 
 		checkOutstandingRecruitmentRequests(self);
 		checkOutstandingStorageRequests(self);
+		checkOutstandingBlobWorkerRequests(self);
 		checkBetterSingletons(self);
 
 		self->checkRecoveryStalled();
@@ -5233,7 +5291,6 @@ ACTOR Future<Void> clusterControllerCore(ClusterControllerFullInterface interf,
 			self.addActor.send(clusterRecruitRemoteFromConfiguration(&self, req));
 		}
 		when(RecruitStorageRequest req = waitNext(interf.recruitStorage.getFuture())) {
-			fprintf(stderr, "in CC for StorageReq\n");
 			clusterRecruitStorage(&self, req);
 		}
 		when(RecruitBlobWorkerRequest req = waitNext(interf.recruitBlobWorker.getFuture())) {

@@ -1877,7 +1877,7 @@ ACTOR Future<Void> workerServer(Reference<ClusterConnectionFile> connFile,
 				recruited.initEndpoints();
 				startRole(Role::BLOB_WORKER, recruited.id(), interf.id());
 
-				printf("Recruited as blob worker\n");
+				fprintf(stderr, "Recruited as blob worker\n");
 
 				ReplyPromise<InitializeBlobWorkerReply> blobWorkerReady = req.reply;
 				Future<Void> s = blobWorker(recruited, blobWorkerReady, dbInfo);

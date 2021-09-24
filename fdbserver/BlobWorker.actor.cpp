@@ -39,7 +39,7 @@
 #include "flow/flow.h"
 
 #define BW_DEBUG true
-#define BW_REQUEST_DEBUG false
+#define BW_REQUEST_DEBUG true
 
 // TODO add comments + documentation
 struct BlobFileIndex {
@@ -1987,7 +1987,10 @@ ACTOR Future<Void> blobWorker(BlobWorkerInterface bwInterf,
 		if (BW_DEBUG) {
 			printf("BW got backup container init error %s\n", e.name());
 		}
-		return Void();
+		if (!recruitReply.isSet()) {
+			recruitReply.sendError(recruitment_failed());
+		}
+		throw e;
 	}
 
 	wait(registerBlobWorker(&self, bwInterf));

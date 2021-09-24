@@ -109,6 +109,7 @@ struct WorkerInterface {
 		           dataDistributor,
 		           ratekeeper,
 		           blobManager,
+		           blobWorker,
 		           resolver,
 		           storage,
 		           logRouter,
@@ -197,6 +198,7 @@ struct ClusterControllerFullInterface {
 		           recruitFromConfiguration,
 		           recruitRemoteFromConfiguration,
 		           recruitStorage,
+		           recruitBlobWorker,
 		           registerWorker,
 		           getWorkers,
 		           registerMaster,
@@ -385,11 +387,12 @@ struct RecruitBlobWorkerReply {
 
 struct RecruitBlobWorkerRequest {
 	constexpr static FileIdentifier file_identifier = 72435;
+	std::vector<AddressExclusion> excludeAddresses;
 	ReplyPromise<RecruitBlobWorkerReply> reply;
 
 	template <class Ar>
 	void serialize(Ar& ar) {
-		serializer(ar, reply);
+		serializer(ar, excludeAddresses, reply);
 	}
 };
 
